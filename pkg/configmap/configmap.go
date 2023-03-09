@@ -148,7 +148,7 @@ func (s *Sync) Run(namespaces []string) (chan struct{}, error) {
 		_, controller := cache.NewInformer(
 			source,
 			&v1.ConfigMap{},
-			0,
+			time.Minute*1,
 			cache.ResourceEventHandlerFuncs{
 				AddFunc:    s.add,
 				UpdateFunc: s.update,
@@ -178,6 +178,19 @@ func (s *Sync) update(oldObj, obj interface{}) {
 			logrus.Debugf("OnUpdate cm=%v/%v, retries=%v, oldFp=%v, newFp=%v", cm.Namespace, cm.Name, rtrVal, oldFp, newFp)
 			if newFp != oldFp || rtrVal != "0" {
 				s.syncAdd(cm, isPolicy)
+			}
+		} else {
+			path := fmt.Sprintf("%v/%v", cm.Namespace, cm.Name)
+			for key := range cm.Data {
+				id := fmt.Sprintf("%v/%v", path, key)
+				_, err := s.opa.GetData(id)
+				if err != nil {
+					if isPolicy {
+						logrus.Info("Couldn't find policy, adding lost policy id=%s back into OPA", id)
+						s.syncAdd(cm, isPolicy)
+					}
+				}
+				logrus.Info("Found cm by id=%s", id)
 			}
 		}
 	} else {

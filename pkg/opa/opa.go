@@ -56,6 +56,7 @@ type Data interface {
 	PatchData(path string, op string, value *interface{}) error
 	PutData(path string, value interface{}) error
 	PostData(path string, value interface{}) (json.RawMessage, error)
+	GetData(path string) (json.RawMessage, error)
 }
 
 // New returns a new Client object.
@@ -111,6 +112,30 @@ func (c *httpClient) PostData(path string, value interface{}) (json.RawMessage, 
 	}
 	absPath := slashPath("data", c.prefix, path)
 	resp, err := c.do("POST", absPath, &buf)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Result json.RawMessage        `json:"result"`
+		Error  map[string]interface{} `json:"error"`
+	}
+	if resp.StatusCode != 200 {
+		return nil, c.handleErrors(resp)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	if result.Result == nil {
+		return nil, Undefined{}
+	}
+	return result.Result, nil
+}
+
+func (c *httpClient) GetData(path string) (json.RawMessage, error) {
+	var buf bytes.Buffer
+
+	absPath := slashPath("policies", c.prefix, path)
+	resp, err := c.do("GET", absPath, &buf)
 	if err != nil {
 		return nil, err
 	}
